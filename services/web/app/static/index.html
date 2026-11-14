@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zepto replica demo</title>
+<style>
+:root{--bg:#f6f4fb;--card:#fff;--tx:#1d1530;--mut:#6b6580;--pri:#6a1b9a;--ok:#1b8a3a;--err:#c62828;--bd:#e4dff0}
+@media (prefers-color-scheme:dark){:root{--bg:#120d1c;--card:#1d1630;--tx:#f1ecfa;--mut:#a79fbb;--pri:#c58bf2;--ok:#5fd183;--err:#ff7b7b;--bd:#32284a}}
+*{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+.top{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:12px 16px;background:var(--pri);color:#fff}
+.top b{font-size:18px;margin-right:auto}.top select,.top input,.top button{padding:8px 10px;border-radius:8px;border:0;font:inherit}
+.top button{background:#fff;color:#6a1b9a;cursor:pointer}
+.wrap{display:grid;grid-template-columns:1fr 340px;gap:16px;padding:16px;max-width:1200px;margin:auto}
+@media(max-width:850px){.wrap{grid-template-columns:1fr}}
+h2{font-size:17px;margin:18px 0 8px}h3{margin:0 0 8px;font-size:16px}
+.row{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px}.row.wrap2{flex-wrap:wrap;overflow:visible}
+.card{min-width:150px;max-width:150px;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px}
+.ph{height:64px;border-radius:8px;background:var(--bd);display:grid;place-items:center;font-size:26px;color:var(--pri);font-weight:700}
+.nm{font-weight:600;font-size:14px;min-height:36px}.mut{color:var(--mut);font-size:13px}
+button{font:inherit;cursor:pointer;border:1px solid var(--pri);color:var(--pri);background:transparent;border-radius:8px;padding:6px 10px}
+button.add{background:var(--pri);color:#fff}button.big{width:100%;margin-top:10px;padding:10px}
+.step{display:flex;align-items:center;justify-content:space-between}.step button{width:32px;padding:4px}
+.panel{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px}
+.line{display:flex;justify-content:space-between;padding:3px 0}.tot{font-weight:700;border-top:1px solid var(--bd);margin-top:4px;padding-top:6px}
+.hdr{display:flex;justify-content:space-between;align-items:center;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px}
+.banner{margin-top:10px;padding:14px;border-radius:12px;background:var(--pri);color:#fff}.banner.err{background:var(--err)}
+.pill{padding:2px 10px;border-radius:99px;font-size:12px;border:1px solid currentColor}.ok{color:var(--ok)}.err{color:var(--err)}.warn{color:var(--pri)}
+#trace{font:12px ui-monospace,monospace;max-height:260px;overflow:auto}#trace div{padding:2px 0;border-bottom:1px dashed var(--bd)}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:10px;display:none}
+.btns{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+</style></head><body>
+<div class="top"><b>Zepto replica</b>
+<select id="loc"><option value="cp">Connaught Place</option><option value="kb">Karol Bagh</option><option value="out">Mumbai (outside area)</option></select>
+<input id="q" placeholder="Search milk, bread, chips…"><button data-a="search">Search</button><button data-a="home">Home</button></div>
+<div class="wrap"><div id="main"></div>
+<div><div class="panel" id="cart"></div><div class="panel" id="order" hidden></div>
+<div class="panel"><h3>System trace</h3><div class="mut">Each UI action and the service that answered it.</div><div id="trace"></div></div></div></div>
+<div id="toast"></div>
+<script>
+const USER='demo-user',LOCS={cp:[28.615,77.23],kb:[28.665,77.18],out:[19.07,72.87]};
+const NAMES={8000:'page',8004:'search',8005:'cart',8007:'draft-order',8008:'order',8009:'payment'};
+const S={loc:'cp',store:null,cart:{},cartData:null,page:null,mode:'home',results:[],draft:null,state:null,order:null};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',2600)}
+async function call(port,path,method='GET',body){
+  const t=performance.now();let r,data=null;
+  try{r=await fetch(`/api/${port}${path}`,{method,headers:{'content-type':'application/json'},body:body?JSON.stringify(body):undefined});
+    try{data=await r.json()}catch(e){}}catch(e){toast('Server not reachable');return{ok:false,status:0,data:null}}
+  const d=document.createElement('div');
+  d.innerHTML=`${esc(method)} <b>${NAMES[port]}</b> ${esc(path.split('?')[0])} → <span class="${r.ok?'ok':'err'}">${r.status}</span> ${Math.round(performance.now()-t)}ms`;
+  $('#trace').prepend(d);while($('#trace').children.length>30)$('#trace').lastChild.remove();
+  return{ok:r.ok,status:r.status,data};
+}
+const card=p=>{const q=S.cart[p.sku]||0;
+  return `<div class="card"><div class="ph">${esc(p.name[0])}</div><div class="nm">${esc(p.name)}</div>
+  <div class="mut">₹${p.mrp}${p.available<=5?' · only '+p.available+' left':''}</div>
+  ${q?`<div class="step"><button data-a="dec" data-s="${p.sku}">−</button><b>${q}</b><button data-a="inc" data-s="${p.sku}">+</button></div>`
+     :`<button class="add" data-a="inc" data-s="${p.sku}">Add</button>`}</div>`};
+function renderMain(){
+  const m=$('#main');
+  if(S.mode==='search'){m.innerHTML=`<h2>Results for “${esc($('#q').value)}”</h2>`+(S.results.length?`<div class="row wrap2">${S.results.map(card).join('')}</div>`:'<p class="mut">No in-stock matches.</p>');return}
+  if(!S.page){m.innerHTML='';return}
+  m.innerHTML=S.page.widgets.map(w=>{
+    if(w.type==='NOT_SERVICEABLE')return `<div class="banner err">${esc(w.message)}</div>`;
+    if(w.type==='HEADER')return `<div class="hdr"><div><b>${esc(w.storeName)}</b><div class="mut">${esc(S.page.storeDetailsResponse.city)}</div></div><span class="pill ${w.orderable?'ok':'err'}">${w.orderable?'Open':'Closed'}</span></div>`;
+    if(w.type==='BANNER')return `<div class="banner">${esc(w.title)}</div>`;
+    if(w.type==='PRODUCT_CAROUSEL')return `<h2>${esc(w.title)}</h2><div class="row">${w.items.map(card).join('')}</div>`;
+    return ''}).join('');
+}
+function renderCart(){
+  const c=S.cartData,el=$('#cart');
+  if(!S.store){el.innerHTML='<h3>Cart</h3><p class="mut">Not available here.</p>';return}
+  if(!c||!c.items.length){el.innerHTML='<h3>Cart</h3><p class="mut">Your cart is empty.</p>';return}
+  el.innerHTML='<h3>Cart</h3>'+c.items.map(i=>`<div class="line"><span>${esc(i.name)} × ${i.qty}</span><span>₹${i.lineTotal}</span></div>`).join('')
+   +`<div class="line mut"><span>Subtotal</span><span>₹${c.subtotal}</span></div><div class="line mut"><span>Delivery</span><span>${c.deliveryFee?'₹'+c.deliveryFee:'Free'}</span></div>
+   <div class="line tot"><span>Total</span><span>₹${c.total}</span></div><button class="add big" data-a="checkout">Place order</button>`;
+}
+function renderOrder(){
+  const el=$('#order');if(!S.draft){el.hidden=true;return}el.hidden=false;
+  const st=S.state,cls=st==='ORDER_CONFIRMED'?'ok':st==='ORDER_TERMINATED'?'err':'warn';
+  let h=`<h3>Order ${esc(S.draft.orderCode)}</h3><div>Status <span class="pill ${cls}">${esc(st)}</span></div>`;
+  if(st==='ORDER_RECEIVED')h+=`<p class="mut">Stock is held while you pay.</p><div class="btns"><button class="add" data-a="pay-ok">Pay (success)</button><button data-a="pay-dup">Pay, payment event delivered twice</button><button data-a="pay-fail">Payment fails</button></div>`;
+  if(st==='ORDER_CONFIRMED'&&S.order)h+=`<p>Confirmed in the order service: ₹${S.order.amount}, ${S.order.items.length} item type(s). Only one order exists even if the payment event arrived twice.</p>`;
+  if(st==='ORDER_TERMINATED')h+='<p class="mut">Payment failed. The held stock was released.</p>';
+  if(st!=='ORDER_RECEIVED')h+='<div class="btns"><button data-a="reset">Start a new order</button></div>';
+  el.innerHTML=h;
+}
+async function refreshCart(){
+  if(!S.store){S.cart={};S.cartData=null;renderCart();return}
+  const r=await call(8005,`/v1/cart/${USER}?store_id=${S.store}`);
+  S.cartData=r.data;S.cart={};if(r.ok)r.data.items.forEach(i=>S.cart[i.sku]=i.qty);
+  renderCart();renderMain();
+}
+async function home(){
+  S.mode='home';const L=LOCS[S.loc];
+  const items=Object.entries(S.cart).map(([sku,qty])=>({sku,qty}));
+  const r=await call(8000,'/v1/get_page','POST',{page_type:'HOME',lat:L[0],lng:L[1],cartInfo:{items}});
+  if(!r.ok){toast('Page service unavailable');return}
+  S.page=r.data;S.store=r.data.storeDetailsResponse?r.data.storeDetailsResponse.id:null;
+  renderMain();await refreshCart();
+}
+async function doSearch(){
+  const q=$('#q').value.trim();if(!q)return home();
+  const L=LOCS[S.loc];const r=await call(8004,`/v1/search?q=${encodeURIComponent(q)}&lat=${L[0]}&lng=${L[1]}`);
+  if(!r.ok){toast('Search unavailable');return}
+  S.mode='search';S.results=r.data.results;renderMain();
+}
+async function setQty(sku,qty){
+  if(qty<0)return;
+  const r=await call(8005,`/v1/cart/${USER}/items`,'PUT',{store_id:S.store,sku,qty});
+  if(r.status===409)toast('Not enough stock');else if(!r.ok)toast('Could not update cart');
+  await refreshCart();
+}
+async function checkout(){
+  const c=S.cartData;if(!c||!c.items.length)return;
+  const r=await call(8007,'/v1/draft-orders','POST',{user_id:USER,store_id:S.store,amount:c.total,items:c.items.map(i=>({sku:i.sku,qty:i.qty}))});
+  if(r.status===409){toast('Something just went out of stock');return}
+  if(!r.ok){toast('Could not create order');return}
+  S.draft=r.data;S.state=r.data.state;S.order=null;renderOrder();
+}
+async function pay(outcome,deliveries){
+  const r=await call(8009,'/v1/pay','POST',{order_id:S.draft.orderId,amount:S.cartData.total,outcome,deliveries});
+  if(!r.ok){toast('Payment step failed');return}
+  S.state=r.data.draftOrder.state;
+  if(S.state==='ORDER_CONFIRMED'){
+    const o=await call(8008,`/v1/orders/${S.draft.orderId}`);S.order=o.data;
+    await call(8005,`/v1/cart/${USER}?store_id=${S.store}`,'DELETE');S.cart={};
+  }
+  renderOrder();home();
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b||!b.dataset.a)return;const a=b.dataset.a,s=b.dataset.s;
+  if(a==='inc')setQty(s,(S.cart[s]||0)+1);else if(a==='dec')setQty(s,(S.cart[s]||0)-1);
+  else if(a==='search')doSearch();else if(a==='home'){$('#q').value='';home()}
+  else if(a==='checkout')checkout();else if(a==='pay-ok')pay('success',1);
+  else if(a==='pay-dup')pay('success',2);else if(a==='pay-fail')pay('failure',1);
+  else if(a==='reset'){S.draft=null;renderOrder()}
+});
+$('#q').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch()});
+$('#loc').addEventListener('change',e=>{S.loc=e.target.value;S.cart={};S.draft=null;renderOrder();home()});
+home();
+</script></body></html>

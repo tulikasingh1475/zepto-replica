@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # usage: scripts/dev.sh start|stop|status   (no --reload, to keep the laptop light)
 cd "$(dirname "$0")/.."
-SERVICES="page:8000 store:8001 catalog:8002 inventory:8003 search:8004 cart:8005 pricing:8006 draft-order:8007 order:8008 payment:8009"
+SERVICES="page:8000 store:8001 catalog:8002 inventory:8003 search:8004 cart:8005 pricing:8006 draft-order:8007 order:8008 payment:8009 web:8080"
 case "${1:-start}" in
   start)
     for s in $SERVICES; do n=${s%%:*}; p=${s##*:}
