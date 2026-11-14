@@ -1,0 +1,14 @@
+[
+  {"id": "S-CP", "name": "DEL-Connaught Place", "city": "Delhi", "lat": 28.6315, "lng": 77.2167,
+   "isActive": true, "isLive": true, "isOnline": true, "raining": false, "phase": "NORMAL",
+   "openTime": "06:00", "closeTime": "02:00",
+   "servicableGeofence": [[28.6115,77.1967],[28.6115,77.2367],[28.6515,77.2367],[28.6515,77.1967]]},
+  {"id": "S-KB", "name": "DEL-Karol Bagh", "city": "Delhi", "lat": 28.6519, "lng": 77.1909,
+   "isActive": true, "isLive": true, "isOnline": true, "raining": false, "phase": "NORMAL",
+   "openTime": "06:00", "closeTime": "02:00",
+   "servicableGeofence": [[28.6319,77.1709],[28.6319,77.2109],[28.6719,77.2109],[28.6719,77.1709]]},
+  {"id": "S-OFF", "name": "DEL-Inactive Test", "city": "Delhi", "lat": 28.50, "lng": 77.10,
+   "isActive": false, "isLive": false, "isOnline": false, "raining": false, "phase": "CLOSED",
+   "openTime": "06:00", "closeTime": "02:00",
+   "servicableGeofence": [[28.48,77.08],[28.48,77.12],[28.52,77.12],[28.52,77.08]]}
+]
