@@ -45,3 +45,8 @@ def get_batch(req: BatchRequest):
 def list_products(category: str | None = None, limit: int = Query(20, ge=1, le=100)):
     q = {"category": category} if category else {}
     return list(products().find(q, {"_id": 0}).limit(limit))
+
+
+@app.get("/v1/categories")
+def categories():
+    return sorted(products().distinct("category"))

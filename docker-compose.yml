@@ -21,6 +21,11 @@ services:
       OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
     ports: ["9200:9200"]
     volumes: [osdata:/usr/share/opensearch/data]
+  dynamodb:
+    profiles: ["orders"]
+    image: amazon/dynamodb-local:2.5.2
+    command: "-jar DynamoDBLocal.jar -sharedDb -inMemory"
+    ports: ["8010:8000"]
 volumes:
   pgdata:
   mongodata:
