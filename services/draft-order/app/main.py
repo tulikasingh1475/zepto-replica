@@ -97,6 +97,15 @@ def publish(event: dict):
     log.info("event %s", event)
 
 
+def notify_fulfilment(payload: dict):
+    """Hand a confirmed order to the dark store. Ours. If fulfilment is down the order is not retried."""
+    base = os.getenv("FULFILMENT_URL", "http://localhost:8011")
+    try:
+        httpx.post(f"{base}/v1/orders", json=payload, timeout=3)
+    except httpx.HTTPError:
+        log.warning("fulfilment unavailable for %s", payload.get("order_id"))
+
+
 # ---- state helpers ----
 def load(order_id: str) -> dict:
     item = table().get_item(Key={"ORDER_PK": f"ORDER_ID#{order_id}"}).get("Item")
@@ -139,6 +148,8 @@ def confirm(order_id: str) -> dict:
         return {"orderId": order_id, "state": "PAYMENT_SUCCESSFUL",
                 "note": "order service unavailable; sweep will retry"}
     set_state(order_id, "ORDER_CONFIRMED", ["PAYMENT_SUCCESSFUL"])
+    notify_fulfilment({"order_id": order_id, "user_id": d["user_id"], "store_id": d["store_id"],
+                       "items": d["items"], "amount": d["amount"], "lat": d.get("lat"), "lng": d.get("lng")})
     publish({"type": "order.confirmed", "orderId": order_id})
     return {"orderId": order_id, "state": "ORDER_CONFIRMED"}
 
@@ -155,6 +166,8 @@ class DraftReq(BaseModel):
     items: list[Item] = Field(min_length=1)
     amount: int = Field(ge=0)
     ttl_seconds: int = Field(300, gt=0)
+    lat: float | None = None
+    lng: float | None = None
 
 
 class PaymentEvent(BaseModel):
@@ -170,7 +183,8 @@ def create(req: DraftReq):
     expire = created + timedelta(seconds=req.ttl_seconds)
     items = [i.model_dump() for i in req.items]
     reserve(order_id, req.store_id, items, req.ttl_seconds)
-    data = json.dumps({"user_id": req.user_id, "store_id": req.store_id, "items": items, "amount": req.amount})
+    data = json.dumps({"user_id": req.user_id, "store_id": req.store_id, "items": items,
+                       "amount": req.amount, "lat": req.lat, "lng": req.lng})
     try:
         t.put_item(Item={"ORDER_PK": f"ORDER_ID#{order_id}", "STATE": "ORDER_RECEIVED",
                          "EXPIRE_AT": int(expire.timestamp()), "DATA": data,

@@ -17,7 +17,7 @@ def index():
 
 @app.api_route("/api/{port}/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def proxy(port: int, path: str, request: Request):
-    if not 8000 <= port <= 8009:
+    if port not in (*range(8000, 8010), 8011):
         raise HTTPException(404, "unknown service")
     async with httpx.AsyncClient(timeout=10) as c:
         try:
@@ -27,3 +27,19 @@ async def proxy(port: int, path: str, request: Request):
         except httpx.HTTPError:
             raise HTTPException(502, "service unreachable")
     return Response(r.content, status_code=r.status_code, media_type="application/json")
+
+
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+
+@app.get("/store")
+def store_page():
+    return FileResponse(STATIC / "store.html")
+
+
+@app.get("/rider")
+def rider_page():
+    return FileResponse(STATIC / "rider.html")
+
+
+app.mount("/static", StaticFiles(directory=STATIC), name="static")

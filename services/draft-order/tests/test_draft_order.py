@@ -16,6 +16,7 @@ def fakes(monkeypatch):
     calls = {"reserve": [], "release": [], "orders": []}
     monkeypatch.setattr(m, "reserve", lambda oid, store, items, ttl: calls["reserve"].append(oid))
     monkeypatch.setattr(m, "release", lambda oid: calls["release"].append(oid))
+    monkeypatch.setattr(m, "notify_fulfilment", lambda payload: None)
     monkeypatch.setattr(m, "post_order", lambda payload: calls["orders"].append(payload["order_id"]))
     return calls
 

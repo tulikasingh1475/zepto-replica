@@ -1,0 +1,38 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dark store</title><link rel="stylesheet" href="/static/common.css"></head><body>
+<div class="top"><b>Dark store dashboard</b><a href="/">User</a><a href="/rider">Rider</a>
+<select id="st"></select><label><input type="checkbox" id="auto"> Auto-play</label></div>
+<div class="grid"><div><div class="panel"><h3>Incoming orders</h3><div id="orders"></div></div></div>
+<div><div class="panel"><h3>Service area map</h3><div id="map"></div></div>
+<div class="panel"><h3>Held stock (reservations)</h3><div class="mut">HELD while paying, COMMITTED when packed, RELEASED on failed payment, EXPIRED on timeout.</div><div id="res"></div></div>
+<div class="panel"><h3>Live stock levels</h3><div id="stock"></div></div></div></div>
+<script src="/static/common.js"></script>
+<script>
+let STORES=[],store='S-CP',n=0,busy=false;
+const NEXT={PLACED:['accept','Accept order'],ACCEPTED:['pack','Mark packed']};
+const act=(id,a)=>api(8011,`/v1/orders/${id}/advance`,'POST',{action:a});
+async function tick(){
+  if(busy)return;busy=true;n++;
+  if(n%5===0)await api(8003,'/v1/expire','POST'); // stands in for a scheduler
+  const [o,rs]=await Promise.all([api(8011,`/v1/orders?store_id=${store}`),api(8003,`/v1/reservations?store_id=${store}`)]);
+  const orders=o.ok?o.data:[],res=rs.ok?rs.data:[];
+  if($('#auto').checked)for(const x of orders){const nx=NEXT[x.status];if(nx)await act(x.orderId,nx[0])}
+  const skus=[...orders.flatMap(x=>x.items.map(i=>i.sku)),...res.map(r=>r.sku)];await nameMap(skus);
+  $('#orders').innerHTML=orders.length?orders.map(x=>`<div class="ord"><b>#${esc(x.orderId.slice(0,8))}</b> ${pill(x.status)} <span class="mut">₹${x.amount}</span>
+    <div>${x.items.map(i=>esc(names[i.sku]||i.sku)+' × '+i.qty).join(', ')}</div>
+    ${x.riderName?`<div class="mut">Rider: ${esc(x.riderName)}</div>`:''}${x.status==='PACKED'?'<div class="mut">Waiting for a free rider</div>':''}
+    ${NEXT[x.status]?`<button data-id="${x.orderId}" data-a="${NEXT[x.status][0]}">${NEXT[x.status][1]}</button>`:''}</div>`).join(''):'<p class="mut">No orders yet. Place one on the user page.</p>';
+  $('#res').innerHTML=res.length?'<table><tr><th>Order</th><th>Item</th><th>Qty</th><th>Status</th><th>Expires</th></tr>'+res.slice(0,15).map(r=>
+    `<tr><td>#${esc(r.orderRef.slice(0,6))}</td><td>${esc(names[r.sku]||r.sku)}</td><td>${r.qty}</td><td>${pill(r.status)}</td><td>${new Date(r.expiresAt).toLocaleTimeString()}</td></tr>`).join('')+'</table>':'<p class="mut">No reservations yet.</p>';
+  const sk=[...new Set(res.map(r=>r.sku))].slice(0,8);
+  if(sk.length){const s=await api(8003,`/v1/stock?store_id=${store}&skus=${sk.join(',')}`);
+    $('#stock').innerHTML='<table><tr><th>Item</th><th>Available</th><th>Reserved</th></tr>'+(s.ok?s.data:[]).map(r=>`<tr><td>${esc(names[r.sku]||r.sku)}</td><td>${r.available}</td><td>${r.reserved}</td></tr>`).join('')+'</table>'}
+  else $('#stock').innerHTML='<p class="mut">Stock appears here once items are reserved.</p>';
+  drawMap($('#map'),STORES,orders.filter(x=>x.status!=='DELIVERED').concat(orders.filter(x=>x.status==='DELIVERED').slice(0,2)),store);
+  busy=false;
+}
+document.addEventListener('click',async e=>{const b=e.target.closest('button[data-a]');if(b){await act(b.dataset.id,b.dataset.a);busy=false;tick()}});
+(async()=>{const r=await api(8001,'/v1/stores');STORES=r.ok?r.data:[];
+  $('#st').innerHTML=STORES.filter(s=>s.isActive).map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  $('#st').onchange=e=>{store=e.target.value;busy=false;tick()};tick();setInterval(tick,2000)})();
+</script></body></html>

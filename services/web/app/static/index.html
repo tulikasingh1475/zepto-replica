@@ -28,7 +28,7 @@ button.add{background:var(--pri);color:#fff}button.big{width:100%;margin-top:10p
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:10px;display:none}
 .btns{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 </style></head><body>
-<div class="top"><b>Zepto replica</b>
+<div class="top"><b>Zepto replica</b><a href="/store" style="color:#fff">Dark store</a><a href="/rider" style="color:#fff">Rider</a>
 <select id="loc"><option value="cp">Connaught Place</option><option value="kb">Karol Bagh</option><option value="out">Mumbai (outside area)</option></select>
 <input id="q" placeholder="Search milk, bread, chips…"><button data-a="search">Search</button><button data-a="home">Home</button></div>
 <div class="wrap"><div id="main"></div>
@@ -37,7 +37,7 @@ button.add{background:var(--pri);color:#fff}button.big{width:100%;margin-top:10p
 <div id="toast"></div>
 <script>
 const USER='demo-user',LOCS={cp:[28.615,77.23],kb:[28.665,77.18],out:[19.07,72.87]};
-const NAMES={8000:'page',8004:'search',8005:'cart',8007:'draft-order',8008:'order',8009:'payment'};
+const NAMES={8000:'page',8004:'search',8005:'cart',8007:'draft-order',8008:'order',8009:'payment',8011:'fulfilment'};
 const S={loc:'cp',store:null,cart:{},cartData:null,page:null,mode:'home',results:[],draft:null,state:null,order:null};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -81,6 +81,7 @@ function renderOrder(){
   let h=`<h3>Order ${esc(S.draft.orderCode)}</h3><div>Status <span class="pill ${cls}">${esc(st)}</span></div>`;
   if(st==='ORDER_RECEIVED')h+=`<p class="mut">Stock is held while you pay.</p><div class="btns"><button class="add" data-a="pay-ok">Pay (success)</button><button data-a="pay-dup">Pay, payment event delivered twice</button><button data-a="pay-fail">Payment fails</button></div>`;
   if(st==='ORDER_CONFIRMED'&&S.order)h+=`<p>Confirmed in the order service: ₹${S.order.amount}, ${S.order.items.length} item type(s). Only one order exists even if the payment event arrived twice.</p>`;
+  if(S.track){const ST=['PLACED','ACCEPTED','PACKED','RIDER_ASSIGNED','PICKED_UP','DELIVERED'],i=ST.indexOf(S.track.status);h+='<div style="margin:8px 0">'+ST.map((s,k)=>'<div class="'+(k<=i?'ok':'mut')+'">'+(k<=i?'● ':'○ ')+s.replace('_',' ')+'</div>').join('')+'</div>'+(S.track.riderName?'<p>Rider: <b>'+esc(S.track.riderName)+'</b></p>':'')}
   if(st==='ORDER_TERMINATED')h+='<p class="mut">Payment failed. The held stock was released.</p>';
   if(st!=='ORDER_RECEIVED')h+='<div class="btns"><button data-a="reset">Start a new order</button></div>';
   el.innerHTML=h;
@@ -113,10 +114,10 @@ async function setQty(sku,qty){
 }
 async function checkout(){
   const c=S.cartData;if(!c||!c.items.length)return;
-  const r=await call(8007,'/v1/draft-orders','POST',{user_id:USER,store_id:S.store,amount:c.total,items:c.items.map(i=>({sku:i.sku,qty:i.qty}))});
+  const r=await call(8007,'/v1/draft-orders','POST',{user_id:USER,store_id:S.store,amount:c.total,lat:LOCS[S.loc][0],lng:LOCS[S.loc][1],items:c.items.map(i=>({sku:i.sku,qty:i.qty}))});
   if(r.status===409){toast('Something just went out of stock');return}
   if(!r.ok){toast('Could not create order');return}
-  S.draft=r.data;S.state=r.data.state;S.order=null;renderOrder();
+  S.draft=r.data;S.state=r.data.state;S.order=null;S.track=null;renderOrder();
 }
 async function pay(outcome,deliveries){
   const r=await call(8009,'/v1/pay','POST',{order_id:S.draft.orderId,amount:S.cartData.total,outcome,deliveries});
@@ -134,9 +135,10 @@ document.addEventListener('click',e=>{
   else if(a==='search')doSearch();else if(a==='home'){$('#q').value='';home()}
   else if(a==='checkout')checkout();else if(a==='pay-ok')pay('success',1);
   else if(a==='pay-dup')pay('success',2);else if(a==='pay-fail')pay('failure',1);
-  else if(a==='reset'){S.draft=null;renderOrder()}
+  else if(a==='reset'){S.draft=null;S.track=null;renderOrder()}
 });
 $('#q').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch()});
 $('#loc').addEventListener('change',e=>{S.loc=e.target.value;S.cart={};S.draft=null;renderOrder();home()});
+setInterval(()=>{if(S.draft&&S.state==='ORDER_CONFIRMED')fetch('/api/8011/v1/orders/'+S.draft.orderId).then(r=>r.json()).then(d=>{S.track=d;renderOrder()}).catch(()=>{})},2000);
 home();
 </script></body></html>

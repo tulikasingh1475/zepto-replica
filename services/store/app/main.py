@@ -47,3 +47,8 @@ def serviceability(lat: float, lng: float):
         # isActive = store exists in the network; isOnline/isLive = taking orders now
         "orderable": best["isOnline"] and best["isLive"],
     }
+
+
+@app.get("/v1/stores")
+def list_stores():
+    return _load()

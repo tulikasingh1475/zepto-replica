@@ -1,0 +1,31 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Delivery partner</title><link rel="stylesheet" href="/static/common.css"></head><body>
+<div class="top"><b>Delivery partner app</b><a href="/">User</a><a href="/store">Dark store</a>
+<select id="rd"></select><label><input type="checkbox" id="auto"> Auto-play</label></div>
+<div class="grid"><div><div class="panel"><h3>My status</h3><div id="me"></div></div><div class="panel"><h3>Current delivery</h3><div id="task"></div></div></div>
+<div><div class="panel"><h3>Route</h3><div id="map"></div></div></div></div>
+<script src="/static/common.js"></script>
+<script>
+let STORES=[],rider=null,busy=false;
+const NEXT={RIDER_ASSIGNED:['pickup','Picked up from store'],PICKED_UP:['deliver','Delivered to customer']};
+const act=(id,a)=>api(8011,`/v1/orders/${id}/advance`,'POST',{action:a});
+async function tick(){
+  if(busy||!rider)return;busy=true;
+  const [rs,t]=await Promise.all([api(8011,'/v1/riders'),api(8011,`/v1/riders/${rider}/task`)]);
+  const me=(rs.ok?rs.data:[]).find(r=>r.riderId===rider),o=t.ok?t.data:null;
+  if(o&&$('#auto').checked){const nx=NEXT[o.status];if(nx)await act(o.orderId,nx[0])}
+  $('#me').innerHTML=me?`<b>${esc(me.name)}</b> <span class="mut">(${esc(me.storeId)})</span> ${pill(me.status)}`:'';
+  if(o){await nameMap(o.items.map(i=>i.sku));const st=STORES.find(s=>s.id===o.storeId);
+    $('#task').innerHTML=`<div class="ord"><b>#${esc(o.orderId.slice(0,8))}</b> ${pill(o.status)} <span class="mut">₹${o.amount}</span>
+      <div>Pick up at: <b>${esc(st?st.name:o.storeId)}</b></div><div>Drop: ${o.dropLat!=null?o.dropLat.toFixed(4)+', '+o.dropLng.toFixed(4):'n/a'}</div>
+      <div>${o.items.map(i=>esc(names[i.sku]||i.sku)+' × '+i.qty).join(', ')}</div>
+      ${NEXT[o.status]?`<button data-id="${o.orderId}" data-a="${NEXT[o.status][0]}">${NEXT[o.status][1]}</button>`:''}</div>`}
+  else $('#task').innerHTML='<p class="mut">No delivery assigned. Orders appear here after the dark store packs them.</p>';
+  drawMap($('#map'),STORES,o?[o]:[],me&&me.storeId);busy=false;
+}
+document.addEventListener('click',async e=>{const b=e.target.closest('button[data-a]');if(b){await act(b.dataset.id,b.dataset.a);busy=false;tick()}});
+(async()=>{const [s,r]=await Promise.all([api(8001,'/v1/stores'),api(8011,'/v1/riders')]);STORES=s.ok?s.data:[];
+  const rs=r.ok?r.data:[];rider=rs.length?rs[0].riderId:null;
+  $('#rd').innerHTML=rs.map(x=>`<option value="${x.riderId}">${esc(x.name)} (${esc(x.storeId)})</option>`).join('');
+  $('#rd').onchange=e=>{rider=e.target.value;busy=false;tick()};tick();setInterval(tick,2000)})();
+</script></body></html>

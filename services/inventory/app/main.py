@@ -121,3 +121,46 @@ def release(req: ReleaseRequest):
                 "UPDATE stock SET available = available + %s, reserved = reserved - %s "
                 "WHERE store_id=%s AND sku=%s", (qty, qty, store, sku))
     return {"orderRef": req.order_ref, "released": len(rows)}
+
+
+class CommitRequest(BaseModel):
+    order_ref: str
+
+
+@app.post("/v1/commit")
+def commit(req: CommitRequest):
+    """HELD -> COMMITTED: the units are sold, so they leave `reserved`. Ours."""
+    ensure_schema()
+    with _conn() as c:
+        rows = c.execute(
+            "UPDATE reservations SET status='COMMITTED' WHERE order_ref=%s AND status='HELD' "
+            "RETURNING store_id, sku, qty", (req.order_ref,)).fetchall()
+        for store, sku, qty in rows:
+            c.execute("UPDATE stock SET reserved = reserved - %s WHERE store_id=%s AND sku=%s",
+                      (qty, store, sku))
+    return {"orderRef": req.order_ref, "committed": len(rows)}
+
+
+@app.post("/v1/expire")
+def expire():
+    """HELD past expires_at -> EXPIRED and the stock goes back. Stand-in for a scheduler. Ours."""
+    ensure_schema()
+    with _conn() as c:
+        rows = c.execute(
+            "UPDATE reservations SET status='EXPIRED' WHERE status='HELD' AND expires_at < now() "
+            "RETURNING store_id, sku, qty").fetchall()
+        for store, sku, qty in rows:
+            c.execute("UPDATE stock SET available = available + %s, reserved = reserved - %s "
+                      "WHERE store_id=%s AND sku=%s", (qty, qty, store, sku))
+    return {"expired": len(rows)}
+
+
+@app.get("/v1/reservations")
+def reservations(store_id: str, limit: int = Query(40, ge=1, le=200)):
+    ensure_schema()
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT order_ref, sku, qty, status, expires_at FROM reservations "
+            "WHERE store_id=%s ORDER BY id DESC LIMIT %s", (store_id, limit)).fetchall()
+    return [{"orderRef": r[0], "sku": r[1], "qty": r[2], "status": r[3],
+             "expiresAt": r[4].isoformat()} for r in rows]
